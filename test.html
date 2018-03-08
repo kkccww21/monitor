@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+
+</body>
+
+
+<script>
+var enums = {
+	'configdiff':'配置有差异',
+	'sceneerr':'发电场景有差异'
+};
+var amap={};
+var bmap={};
+var aa = [];
+var bb = [];
+enums['ahas']='线下有，线上无';
+enums['bhas']='线下无，线上有';
+enums['arepeat']='线下重复';
+enums['brepeat']='线上重复';
+
+
+let directiveComp = (aitem, bitem)=>{
+	if(bitem.config != aitem.config){
+		aitem.cstatus = 'configdiff';
+	}else if(bitem.scene != aitem.scene){
+		aitem.cstatus = 'sceneerr';
+	}
+}
+ajax('http://10.247.19.173:8080/fc-settlement-gateway/api/v1/admin/list/TSettlementConfigDO',rsp=>{
+	aa = rsp.data;
+	compare('directive',directiveComp);
+});
+ajax('http://settlement.51.nb/fc-settlement-gateway/api/v1/admin/list/TSettlementConfigDO',rsp=>{
+	bb = rsp.data;
+	compare('directive',directiveComp);
+});
+
+let subjectComp = (aitem, bitem)=>{
+	let fields = ['accountSubjectLevel','balanceDirection','hasChild','parentSubjectCode','parentSubjectName','subjectName','tableTag'];
+	for(let i=0;i<fields.length;i++){
+		if(bitem[fields[i]] !== aitem[fields[i]]){
+			aitem.cstatus = fields[i] + '有差异';
+		}
+	}
+}
+ajax('http://10.247.255.14:8080/fund-account/api/v1/adminConfig/list/AccountSubject',rsp=>{
+	aa = rsp.data;
+	compare('subjectCode',subjectComp);
+});
+ajax('http://jax.rc.51.nb/fund-account/api/v1/adminConfig/list/AccountSubject',rsp=>{
+	bb = rsp.data;
+	compare('subjectCode',subjectComp);
+});
+
+let innerAccComp = (aitem, bitem)=>{
+	let fields = ['balanceDirection','carryOverTag','enterpriseId','financeAccountName','moneyType','overdrawTag','subjectCode','subjectName'];
+	for(let i=0;i<fields.length;i++){
+		if(bitem[fields[i]] !== aitem[fields[i]]){
+			aitem.cstatus = fields[i] + '有差异';
+		}
+	}
+}
+ajax('http://10.247.255.14:8080/fund-account/api/v1/adminConfig/list/FundInnerAccount',rsp=>{
+	aa = rsp.data;
+	compare('financeAccountId',innerAccComp);
+});
+ajax('http://jax.rc.51.nb/fund-account/api/v1/adminConfig/list/FundInnerAccount',rsp=>{
+	bb = rsp.data;
+	compare('financeAccountId',innerAccComp);
+});
+
+
+let moneyKindComp = (aitem, bitem)=>{
+	let fields = ['accountTypeTag','moneyKindName','moneyType','productId','subjectCode','subjectName'];
+	for(let i=0;i<fields.length;i++){
+		if(bitem[fields[i]] !== aitem[fields[i]]){
+			aitem.cstatus = fields[i] + '有差异';
+		}
+	}
+}
+ajax('http://10.247.255.14:8080/fund-account/api/v1/adminConfig/list/MoneyKind',rsp=>{
+	aa = rsp.data;
+	compare('moneyKindCode',moneyKindComp);
+});
+ajax('http://jax.rc.51.nb/fund-account/api/v1/adminConfig/list/MoneyKind',rsp=>{
+	bb = rsp.data;
+	compare('moneyKindCode',moneyKindComp);
+});
+
+
+
+function compare(key,customComp){
+	if(aa.length == 0 || bb.length == 0)return;
+	aa.forEach(aitem=>{
+		if(amap[aitem[key]]){
+			aitem.rstatus = 'arepeat';
+		}
+		amap[aitem[key]] = aitem;
+	});
+	bb.forEach(bitem=>{
+		if(bmap[bitem[key]]){
+			bitem.rstatus = 'brepeat';
+		}
+		bmap[bitem[key]] = bitem;
+	});
+
+	aa.forEach(aitem=>{
+		let bitem = bmap[aitem[key]];
+		if(bitem === undefined){
+			aitem.cstatus = 'ahas';
+		}else{
+			bitem.compared = true;
+			customComp && customComp(aitem, bitem);
+		}
+	});
+	for(let ak in amap){
+		let aitem = amap[ak];
+		if(aitem.cstatus){
+			print(key + ': ' + (enums[aitem.cstatus]?enums[aitem.cstatus]:aitem.cstatus) + ':' + aitem[key]);
+		}
+	}
+	for(let ak in amap){
+		let aitem = amap[ak];
+		if(aitem.rstatus){
+			print(key + ': ' + (enums[aitem.rstatus]?enums[aitem.rstatus]:aitem.rstatus) + ':' + aitem[key]);
+		}
+	}
+	for(let bk in bmap){
+		let bitem = bmap[bk];
+		if(bitem.rstatus){
+			print(key + ': ' + (enums[bitem.rstatus]?enums[bitem.rstatus]:bitem.rstatus) + ':' + bitem[key]);
+		}
+	}
+	for(let bk in bmap){
+		let bitem = bmap[bk];
+		if(!bitem.compared){
+			print(key + ': ' + enums['bhas'] + ':' + bitem[key]);
+		}
+	}
+	
+	print('<br><div style="height:1px;background-color:#666;">');
+	amap={};
+    bmap={};
+    aa = [];
+    bb = [];
+}
+
+function ajax(url,callback){
+	var xhr = new XMLHttpRequest();
+	xhr.onreadystatechange = function(event){
+		if(xhr.readyState == 4){
+			if(xhr.status == 200){
+				callback(JSON.parse(xhr.responseText));
+			}
+		}
+	};
+	xhr.open('POST',url,false);
+	xhr.setRequestHeader('Content-type','text/plain');
+	xhr.withCredentials=true;
+	xhr.send('{}');
+}
+
+function print(str){
+	document.write(str);
+	document.write('<br>');
+}
+</script>
+
+</html>
